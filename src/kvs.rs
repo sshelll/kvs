@@ -6,18 +6,6 @@ use std::io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::{collections::HashMap, path};
 
 /// The `KvStore` stores string key/value pairs.
-///
-/// Key/value pairs are stored in a `HashMap` in memory and not persisted to disk.
-///
-/// Example:
-///
-/// ```rust
-/// # use kvs::KvStore;
-/// let mut store = KvStore::open(std::path::Path::new("kvs.log")).unwrap();
-/// store.set("key".to_owned(), "value".to_owned());
-/// let val = store.get("key".to_owned());
-/// assert_eq!(val, Some("value".to_owned()));
-/// ```
 pub struct KvStore {
     file_path: path::PathBuf,
 
@@ -71,9 +59,9 @@ impl KvStore {
     /// If the key already exists, the previous value will be overwritten.
     pub fn set(&mut self, key: String, value: String) -> Result<()> {
         let log = KvLog::new("set".to_string(), key.clone(), Some(value));
+        let pos = self.writer.as_ref().unwrap().pos;
         self.append_log_file(&log)?;
-        self.index
-            .insert(key.clone(), self.writer.as_ref().unwrap().pos);
+        self.index.insert(key.clone(), pos);
         Ok(())
     }
 
