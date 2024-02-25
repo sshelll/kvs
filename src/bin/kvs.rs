@@ -1,8 +1,8 @@
-use std::process::exit;
+use std::{env::current_dir, process::exit};
 
 use clap::{Parser, Subcommand};
 
-use kvs::KvsError;
+use kvs::{KvsError, Result};
 
 // NOTE: we can also use `structopt` instead of `clap` for parsing command line arguments.
 #[derive(Parser, Debug)]
@@ -27,24 +27,45 @@ enum Command {
     },
 }
 
-fn main() -> Result<(), KvsError> {
+fn main() -> Result<()> {
     let args = Args::parse();
 
-    let log_file = format!("{}/kvs.log", env!("HOME"));
+    // let log_file = format!("{}/rust/kvs/kvs.log", env!("HOME"));
+    let log_file = current_dir().unwrap();
     let mut kv_store = kvs::KvStore::open(std::path::Path::new(&log_file))?;
 
     match args.command {
         Command::Set { key, value } => {
+            eprintln!("[DEBUG] set key: {}, value: {}", key, value);
             kv_store.set(key, value)?;
             Ok(())
         }
         Command::Get { key } => {
-            eprintln!("unimplemented, cmd: get {}", key);
-            exit(1);
+            eprintln!("[DEBUG] get key: {}", key);
+            match kv_store.get(key) {
+                Ok(Some(value)) => {
+                    println!("{}", value);
+                    Ok(())
+                }
+                Ok(None) => {
+                    println!("{}", KvsError::KeyNotFound);
+                    Ok(())
+                }
+                Err(e) => {
+                    println!("{}", e);
+                    exit(1);
+                }
+            }
         }
         Command::Remove { key } => {
-            kv_store.remove(key)?;
-            Ok(())
+            eprintln!("[DEBUG] remove key: {}", key);
+            match kv_store.remove(key) {
+                Ok(_) => Ok(()),
+                Err(e) => {
+                    println!("{}", e);
+                    exit(1);
+                }
+            }
         }
     }
 }
