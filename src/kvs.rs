@@ -58,7 +58,10 @@ impl KvStore {
     /// Sets the value of a string key to a string.
     /// If the key already exists, the previous value will be overwritten.
     pub fn set(&mut self, key: String, value: String) -> Result<()> {
-        let log = KvLog::new("set".to_string(), key.clone(), Some(value));
+        let log = KvLog::Set {
+            key: key.clone(),
+            value: value.clone(),
+        };
         let pos = self.writer.as_ref().unwrap().pos;
         self.append_log_file(&log)?;
         self.index.insert(key.clone(), pos);
@@ -81,9 +84,9 @@ impl KvStore {
         let mut buf = String::new();
         reader.read_line(&mut buf)?;
         let log = KvLog::deserialize(&buf)?;
-        match log.value {
-            Some(v) => Ok(Some(v)),
-            None => Err(KvsError::KeyNotFound),
+        match log {
+            KvLog::Set { value, .. } => Ok(Some(value)),
+            KvLog::Remove { .. } => Ok(None),
         }
     }
 
@@ -93,7 +96,7 @@ impl KvStore {
             return Err(KvsError::KeyNotFound);
         }
         self.index.remove(&key);
-        let log = KvLog::new("rm".to_string(), key, None);
+        let log = KvLog::Remove { key: key.clone() };
         self.append_log_file(&log)?;
         Ok(())
     }
@@ -102,19 +105,11 @@ impl KvStore {
         let serialized = log.serialize()?;
         let log_line = format!("{}\n", serialized);
         let writer = self.writer.as_mut().unwrap();
-        match writer.write_all(log_line.as_bytes()) {
-            Ok(_) => {}
-            Err(e) => return Err(KvsError::Io(e)),
+        if let Err(e) = writer.write_all(log_line.as_bytes()) {
+            return Err(KvsError::Io(e));
         };
-        match writer.flush() {
-            Ok(_) => {}
-            Err(e) => return Err(KvsError::Io(e)),
-        }
-        match writer.seek(SeekFrom::End(0)) {
-            Ok(_) => {
-                eprintln!("[DEBUG] append_log_file seek pos now is {}", writer.pos);
-            }
-            Err(e) => return Err(KvsError::Io(e)),
+        if let Err(e) = writer.flush() {
+            return Err(KvsError::Io(e));
         }
         Ok(())
     }
@@ -160,16 +155,15 @@ impl KvStore {
         let mut stream = Deserializer::from_reader(reader).into_iter::<KvLog>();
         while let Some(log) = stream.next() {
             match log {
-                Ok(l) => match l.cmd.as_str() {
-                    "set" => {
+                Ok(l) => match l {
+                    KvLog::Set { key, value: _ } => {
                         // only store pos in memory
-                        self.index.insert(l.key.clone(), pos);
+                        self.index.insert(key.clone(), pos);
                     }
-                    "rm" => {
+                    KvLog::Remove { key } => {
                         // remove from memory
-                        self.index.remove(&l.key);
+                        self.index.remove(&key);
                     }
-                    _ => return Err(KvsError::InvalidCommand(l.cmd)),
                 },
                 Err(e) => {
                     return {
@@ -187,17 +181,12 @@ impl KvStore {
 }
 
 #[derive(Serialize, Deserialize)]
-struct KvLog {
-    cmd: String,
-    key: String,
-    value: Option<String>,
+enum KvLog {
+    Set { key: String, value: String },
+    Remove { key: String },
 }
 
 impl KvLog {
-    fn new(cmd: String, key: String, value: Option<String>) -> KvLog {
-        KvLog { cmd, key, value }
-    }
-
     fn serialize(&self) -> Result<String> {
         match serde_json::to_string(&self) {
             Ok(s) => Ok(s),
