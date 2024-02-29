@@ -15,6 +15,18 @@ pub enum KvsError {
     Other(String),
 }
 
+impl From<std::io::Error> for KvsError {
+    fn from(err: std::io::Error) -> KvsError {
+        KvsError::Io(err)
+    }
+}
+
+impl From<serde_json::Error> for KvsError {
+    fn from(err: serde_json::Error) -> KvsError {
+        KvsError::Serde(err)
+    }
+}
+
 impl std::fmt::Display for KvsError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
