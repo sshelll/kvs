@@ -1,4 +1,4 @@
-use std::{env::current_dir, io::Write, net::TcpStream, process::exit};
+use std::{process::exit};
 
 use clap::{Parser, Subcommand};
 
