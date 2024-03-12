@@ -2,9 +2,15 @@
 #![deny(missing_docs)]
 //! A simple key-value store.
 
+mod client;
+mod engines;
 mod errors;
-mod kvs;
+mod protocol;
+mod server;
 
+pub use client::KvsClient;
+pub use engines::KvStore;
+pub use engines::KvsEngine;
 pub use errors::KvsError;
 pub use errors::Result;
-pub use kvs::KvStore;
+pub use server::KvsServer;

@@ -1,5 +1,5 @@
 use crate::errors::Result;
-use crate::KvsError;
+use crate::{KvsEngine, KvsError};
 use serde::{Deserialize, Serialize};
 use serde_json::Deserializer;
 use std::fs::{self, File};
@@ -18,6 +18,64 @@ pub struct KvStore {
     path: path::PathBuf,
     current_gen: u64,
     uncompacted: u64,
+}
+
+impl KvsEngine for KvStore {
+    /// Sets the value of a string key to a string.
+    /// If the key already exists, the previous value will be overwritten.
+    fn set(&mut self, key: String, value: String) -> Result<()> {
+        let log = KvLog::Set {
+            key: key.clone(),
+            value,
+        };
+
+        let old_pos = self.writer.pos;
+        self.append_log_file(&log)?;
+        let cur_pos = self.writer.pos;
+
+        if let Some(old) = self
+            .index
+            .insert(key, (self.current_gen, old_pos..cur_pos).into())
+        {
+            self.uncompacted += old.len;
+        }
+
+        if self.uncompacted > COMPACTION_THRESHOLD {
+            self.compact()?;
+        }
+        Ok(())
+    }
+
+    /// Gets the string value of a given string key.
+    /// If the key does not exist, returns `None`.
+    fn get(&mut self, key: String) -> Result<Option<String>> {
+        if !self.index.contains_key(&key) {
+            return Ok(None);
+        }
+        let index_pos = self.index.get(&key).unwrap();
+        let reader = self.reader.get_mut(&index_pos.gen).unwrap();
+        if let Err(e) = reader.seek(SeekFrom::Start(index_pos.pos)) {
+            return Err(KvsError::Io(e));
+        }
+        let mut buf = String::new();
+        reader.read_line(&mut buf)?;
+        let log = KvLog::deserialize(&buf)?;
+        match log {
+            KvLog::Set { value, .. } => Ok(Some(value)),
+            KvLog::Remove { .. } => Ok(None),
+        }
+    }
+
+    /// Removes a given string key from the store.
+    fn remove(&mut self, key: String) -> Result<()> {
+        if !self.index.contains_key(&key) {
+            return Err(KvsError::KeyNotFound);
+        }
+        let log = KvLog::Remove { key: key.clone() };
+        self.append_log_file(&log)?;
+        self.index.remove(&key);
+        Ok(())
+    }
 }
 
 impl KvStore {
@@ -54,62 +112,6 @@ impl KvStore {
             current_gen,
             uncompacted,
         })
-    }
-
-    /// Sets the value of a string key to a string.
-    /// If the key already exists, the previous value will be overwritten.
-    pub fn set(&mut self, key: String, value: String) -> Result<()> {
-        let log = KvLog::Set {
-            key: key.clone(),
-            value,
-        };
-
-        let old_pos = self.writer.pos;
-        self.append_log_file(&log)?;
-        let cur_pos = self.writer.pos;
-
-        if let Some(old) = self
-            .index
-            .insert(key, (self.current_gen, old_pos..cur_pos).into())
-        {
-            self.uncompacted += old.len;
-        }
-
-        if self.uncompacted > COMPACTION_THRESHOLD {
-            self.compact()?;
-        }
-        Ok(())
-    }
-
-    /// Gets the string value of a given string key.
-    /// If the key does not exist, returns `None`.
-    pub fn get(&mut self, key: String) -> Result<Option<String>> {
-        if !self.index.contains_key(&key) {
-            return Ok(None);
-        }
-        let index_pos = self.index.get(&key).unwrap();
-        let reader = self.reader.get_mut(&index_pos.gen).unwrap();
-        if let Err(e) = reader.seek(SeekFrom::Start(index_pos.pos)) {
-            return Err(KvsError::Io(e));
-        }
-        let mut buf = String::new();
-        reader.read_line(&mut buf)?;
-        let log = KvLog::deserialize(&buf)?;
-        match log {
-            KvLog::Set { value, .. } => Ok(Some(value)),
-            KvLog::Remove { .. } => Ok(None),
-        }
-    }
-
-    /// Removes a given string key from the store.
-    pub fn remove(&mut self, key: String) -> Result<()> {
-        if !self.index.contains_key(&key) {
-            return Err(KvsError::KeyNotFound);
-        }
-        let log = KvLog::Remove { key: key.clone() };
-        self.append_log_file(&log)?;
-        self.index.remove(&key);
-        Ok(())
     }
 
     fn append_log_file(&mut self, log: &KvLog) -> Result<()> {

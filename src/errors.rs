@@ -7,8 +7,6 @@ pub enum KvsError {
     Serde(serde_json::Error),
     /// Key not found
     KeyNotFound,
-    /// Unexpected command type
-    UnexpectedCommandType,
     /// Invalid command
     InvalidCommand(String),
     /// Other error
@@ -27,13 +25,18 @@ impl From<serde_json::Error> for KvsError {
     }
 }
 
+impl From<String> for KvsError {
+    fn from(value: String) -> Self {
+        KvsError::Other(value)
+    }
+}
+
 impl std::fmt::Display for KvsError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             KvsError::Io(e) => write!(f, "IO error: {}", e),
             KvsError::Serde(e) => write!(f, "Serde error: {}", e),
             KvsError::KeyNotFound => write!(f, "Key not found"),
-            KvsError::UnexpectedCommandType => write!(f, "Unexpected command type"),
             KvsError::InvalidCommand(s) => write!(f, "Invalid command: {}", s),
             KvsError::Other(s) => write!(f, "Unknown error: {}", s),
         }
