@@ -86,9 +86,7 @@ fn main() -> Result<()> {
 
     match args.engine {
         Engine::Kvs => start_engine(kvs::KvStore::open(&path)?, socket_addr)?,
-        Engine::Sled => {
-            unimplemented!();
-        }
+        Engine::Sled => start_engine(kvs::SledStore::new(sled::open(&path)?), socket_addr)?,
     }
 
     Ok(())

@@ -11,6 +11,7 @@ mod server;
 pub use client::KvsClient;
 pub use engines::KvStore;
 pub use engines::KvsEngine;
+pub use engines::SledStore;
 pub use errors::KvsError;
 pub use errors::Result;
 pub use server::KvsServer;
