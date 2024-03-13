@@ -12,12 +12,14 @@ impl KvsEngine for SledStore {
         self.db.insert(key, value.into_bytes()).map(|_| ())?;
         Ok(())
     }
+
     fn get(&mut self, key: String) -> Result<Option<String>> {
-        let v = self.db.get(key)?;
-        match v {
-            Some(value) => Ok(Some(String::from_utf8(value.to_vec())?)),
-            None => Ok(None),
-        }
+        Ok(self
+            .db
+            .get(key)?
+            .map(|ivec| ivec.as_ref().to_vec())
+            .map(String::from_utf8)
+            .transpose()?)
     }
 
     fn remove(&mut self, key: String) -> Result<()> {
